@@ -86,6 +86,44 @@ class Config(object):
         return self.get(*args, **kwargs)
 
 
+class WritableConfig(Config):
+
+    def __init__(self, *args, **kwargs):
+        if len(args) == 1 and isinstance(args[0], WritableRepositoryIni):
+            self.repository = args[0]
+        else:
+            self.repository = WritableRepositoryIni(*args, **kwargs)
+
+    def get(self, option, default=undefined, cast=undefined):
+        """
+        Return the value for option or default if defined.
+        """
+
+        if option in self.repository:
+            value = self.repository[option]
+        else:
+            if isinstance(default, Undefined):
+                raise UndefinedValueError('{} not found. Declare it as envvar or define a default value.'.format(option))
+            value = default
+
+        if isinstance(cast, Undefined):
+            cast = self._cast_do_nothing
+        elif cast is bool:
+            cast = self._cast_boolean
+
+        return cast(value)
+
+    def __getitem__(self, key):
+        return self.get(key)
+
+    def __contains__(self, key):
+        return key in self.repository
+
+    def __setitem__(self, key, value):
+        self.repository[key] = value
+
+
+
 class RepositoryEmpty(object):
     def __init__(self, source='', encoding=DEFAULT_ENCODING):
         pass
@@ -114,6 +152,38 @@ class RepositoryIni(RepositoryEmpty):
 
     def __getitem__(self, key):
         return self.parser.get(self.SECTION, key)
+
+
+class WritableRepositoryIni(RepositoryIni):
+    """
+    RepositoryIni with write properties, and file and section creation
+    """
+
+    def __init__(self, source, section='default', create_section=True, encoding=DEFAULT_ENCODING):
+        self.SECTION = str(section)
+        self.source = source
+        self.encoding = encoding
+
+        if not os.path.exists(self.source):
+            from pathlib import Path
+            Path(self.source).touch()
+
+        super(WritableRepositoryIni, self).__init__(self.source, encoding)
+
+        if create_section and self.SECTION not in self.parser.sections():
+            self.parser.add_section(self.SECTION)
+            self._save()
+
+    def _save(self):
+        with open(self.source, 'w', encoding=self.encoding) as file_:
+            self.parser.write(file_)
+
+    def __contains__(self, key):
+        return self.parser.has_option(self.SECTION, key)
+
+    def __setitem__(self, key, value):
+        self.parser.set(self.SECTION,key, str(value))
+        self._save()
 
 
 class RepositoryEnv(RepositoryEmpty):
