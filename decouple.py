@@ -122,6 +122,12 @@ class WritableConfig(Config):
     def __setitem__(self, key, value):
         self.repository[key] = value
 
+    def __delitem__(self, key):
+        del self.repository[key]
+
+    def __delattr__(self, item):
+        if item in ['section', 'SECTION']:
+            del self.repository.SECTION
 
 
 class RepositoryEmpty(object):
@@ -182,9 +188,17 @@ class WritableRepositoryIni(RepositoryIni):
         return self.parser.has_option(self.SECTION, key)
 
     def __setitem__(self, key, value):
-        self.parser.set(self.SECTION,key, str(value))
+        self.parser.set(self.SECTION, key, str(value))
         self._save()
 
+    def __delitem__(self, key):
+        self.parser.remove_option(self.SECTION, key)
+        self._save()
+
+    def __delattr__(self, item):
+        if item == 'SECTION':
+            self.parser.remove_section(self.SECTION)
+            self._save()
 
 class RepositoryEnv(RepositoryEmpty):
     """
