@@ -126,8 +126,7 @@ class WritableConfig(Config):
         del self.repository[key]
 
     def __delattr__(self, item):
-        if item in ['section', 'SECTION']:
-            del self.repository.SECTION
+        self.repository.__delattr__(item)
 
 
 class RepositoryEmpty(object):
@@ -165,10 +164,11 @@ class WritableRepositoryIni(RepositoryIni):
     RepositoryIni with write properties, and file and section creation
     """
 
-    def __init__(self, source, section='default', create_section=True, encoding=DEFAULT_ENCODING):
-        self.SECTION = str(section)
+    def __init__(self, source, section='default', create_section=True, cast_inputs=None, encoding=DEFAULT_ENCODING):
+        self.SECTION = str(section) if self._istype(section, cast_inputs) else section
         self.source = source
         self.encoding = encoding
+        self.cast_inputs = cast_inputs
 
         if not os.path.exists(self.source):
             from pathlib import Path
@@ -185,20 +185,37 @@ class WritableRepositoryIni(RepositoryIni):
             self.parser.write(file_)
 
     def __contains__(self, key):
+        key = str(key) if self._istype(key, self.cast_inputs) else key
         return self.parser.has_option(self.SECTION, key)
 
+    def __getitem__(self, key):
+        key = str(key) if self._istype(key, self.cast_inputs) else key
+        return self.parser.get(self.SECTION, key)
+
     def __setitem__(self, key, value):
-        self.parser.set(self.SECTION, key, str(value))
+        key = str(key) if self._istype(key, self.cast_inputs) else key
+        value = str(value) if self._istype(value, self.cast_inputs) else value
+
+        self.parser.set(self.SECTION, key, value)
         self._save()
 
     def __delitem__(self, key):
+        key = str(key) if self._istype(key, self.cast_inputs) else key
+
         self.parser.remove_option(self.SECTION, key)
         self._save()
 
     def __delattr__(self, item):
-        if item == 'SECTION':
+        if item.upper() == 'SECTION':
             self.parser.remove_section(self.SECTION)
             self._save()
+
+    # isinstance takes bool as int
+    @classmethod
+    def _istype(cls, obj, types):
+        if types is None or type(types) == type:
+            types = [types]
+        return type(obj) in types
 
 class RepositoryEnv(RepositoryEmpty):
     """
